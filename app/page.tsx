@@ -1,95 +1,192 @@
-import Image from 'next/image'
-import styles from './page.module.css'
+"use client";
+
+import { Todo } from "@prisma/client";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import "todomvc-app-css/index.css";
 
 export default function Home() {
+  const [newTodo, setNewTodo] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
+  const { data, refetch } = useQuery<Todo[]>({
+    queryKey: ["todos"],
+    queryFn: () => fetch("/api/todos").then((res) => res.json()),
+  });
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const completedTodos = todos.filter((todo) => todo.completed);
+  const activeTodos = todos.filter((todo) => !todo.completed);
+
+  useEffect(() => setTodos(data ?? []), [data]);
+
+  useEffect(() => {
+    if (!data) return;
+
+    if (filter === "all") {
+      setTodos(data);
+    } else if (filter === "active") {
+      setTodos(data.filter((todo) => !todo.completed));
+    } else if (filter === "completed") {
+      setTodos(data.filter((todo) => todo.completed));
+    }
+  }, [data, filter]);
+
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>app/page.tsx</code>
-        </p>
-        <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <>
+      <section className="todoapp">
+        <header className="header">
+          <h1>todos</h1>
+          <input
+            value={newTodo}
+            className="new-todo"
+            onChange={(e) => setNewTodo(e.target.value)}
+            placeholder="What needs to be done?"
+            autoFocus
+            onKeyDown={async (e) => {
+              if (e.key === "Enter") {
+                setNewTodo("");
+                setTodos([
+                  {
+                    id: Math.random().toString(),
+                    title: newTodo,
+                    completed: false,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  },
+                  ...todos,
+                ]);
+                await fetch("/api/todos", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    title: newTodo,
+                    completed: false,
+                  }),
+                });
+                refetch();
+              }
+            }}
+          />
+        </header>
+
+        {/* Should be hidden if no todos available */}
+        <section className="main" hidden={data?.length === 0}>
+          <input id="toggle-all" className="toggle-all" type="checkbox" />
+          <label htmlFor="toggle-all">Mark all as complete</label>
+          <ul className="todo-list">
+            {/* List items should get the class `editing` when editing and `completed` when marked as completed */}
+            {todos.map((todo) => (
+              <li className="todo" key={todo.id}>
+                <div className="view">
+                  <input
+                    className="toggle"
+                    type="checkbox"
+                    checked={todo.completed}
+                    onChange={async (e) => {
+                      setTodos(
+                        todos.map((t) =>
+                          t.id === todo.id
+                            ? {
+                                ...t,
+                                completed: e.target.checked,
+                              }
+                            : t
+                        )
+                      );
+                      await fetch(`/api/todos/${todo.id}`, {
+                        method: "PUT",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                          title: todo.title,
+                          completed: e.target.checked,
+                        }),
+                      });
+                      refetch();
+                    }}
+                  />
+                  <label>{todo.title}</label>
+                  <button
+                    className="destroy"
+                    onClick={async () => {
+                      setTodos(todos.filter((t) => t.id !== todo.id));
+                      await fetch(`/api/todos/${todo.id}`, {
+                        method: "DELETE",
+                      });
+                      refetch();
+                    }}
+                  ></button>
+                </div>
+                <input className="edit" value="Your todo" />
+              </li>
+            ))}
+            {/* more todos here */}
+          </ul>
+        </section>
+
+        {/* Should be hidden if no todos available */}
+        <footer className="footer" hidden={data?.length === 0}>
+          {/* This should be `0 items left` by default */}
+          <span className="todo-count">
+            <strong>{activeTodos.length}</strong> items left
+          </span>
+          {/* Remove this if you don't implement routing */}
+          <ul className="filters">
+            <li>
+              <a
+                className={filter === "all" ? "selected" : ""}
+                href="#/"
+                onClick={(e) => setFilter("all")}
+              >
+                All
+              </a>
+            </li>
+            <li>
+              <a
+                href="#/active"
+                className={filter === "active" ? "selected" : ""}
+                onClick={(e) => setFilter("active")}
+              >
+                Active
+              </a>
+            </li>
+            <li>
+              <a
+                href="#/completed"
+                className={filter === "completed" ? "selected" : ""}
+                onClick={(e) => setFilter("completed")}
+              >
+                Completed
+              </a>
+            </li>
+          </ul>
+          {/* Hidden if no completed items are left ↓ */}
+          <button
+            hidden={completedTodos.length === 0}
+            className="clear-completed"
+            onClick={async () => {
+              setTodos(activeTodos);
+              await fetch(`/api/todos/completed`, {
+                method: "DELETE",
+              });
+              refetch();
+            }}
           >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
-
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore the Next.js 13 playground.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+            Clear completed
+          </button>
+        </footer>
+      </section>
+      <footer className="info">
+        <p>Double-click to edit a todo</p>
+        <p>
+          Created by <a href="#">Ahmed Abdallah</a>
+        </p>
+        <p>
+          Inspired by <a href="http://todomvc.com">TodoMVC</a>
+        </p>
+      </footer>
+    </>
+  );
 }
